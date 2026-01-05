@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Seller {
+  id              String   @id @default(uuid())
+  business_name   String
+  phone           String   @unique
+  instapay_handle String?
+  instapay_phone  String?
+  created_at      DateTime @default(now())
+  products        Product[]
+  link_refs       LinkRef[]
+  orders          Order[]
+  shadow_customers ShadowCustomer[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  seller_id   String
+  seller      Seller   @relation(fields: [seller_id], references: [id])
+  title       String
+  base_price  Decimal
+  is_active   Boolean  @default(true)
+  variants    Variant[]
+  link_refs   LinkRef[]
+}
+
+model Variant {
+  id          String   @id @default(uuid())
+  product_id  String
+  product     Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  name        String   // e.g. "Size M"
+  stock       Int      @default(0)
+  orders      Order[]
+}
+
+model LinkRef {
+  // This is the "Magic" table for the shared links
+  id              String   @id @default(uuid())
+  seller_id       String
+  seller          Seller   @relation(fields: [seller_id], references: [id])
+  product_id      String
+  product         Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  ref_tag         String   // The 3-char code (e.g. "X7Z")
+  is_price_locked Boolean  @default(false)
+  locked_price    Decimal? 
+  created_at      DateTime @default(now())
+  orders          Order[]
+
+  @@index([ref_tag])
+}
+
+model ShadowCustomer {
+  id          String   @id @default(uuid())
+  seller_id   String
+  seller      Seller   @relation(fields: [seller_id], references: [id])
+  phone       String
+  full_name   String?
+  governorate String?
+  address     String?
+  orders      Order[]
+}
+
+model Order {
+  id                String   @id @default(uuid())
+  human_id          Int      @default(autoincrement()) // "Order #105"
+  seller_id         String
+  seller            Seller   @relation(fields: [seller_id], references: [id])
+  customer_id       String
+  customer          ShadowCustomer @relation(fields: [customer_id], references: [id])
+  link_ref_id       String?
+  link_ref          LinkRef? @relation(fields: [link_ref_id], references: [id])
+  variant_id        String?
+  variant           Variant? @relation(fields: [variant_id], references: [id])
+  status            String   @default("pending_verification") 
+  payment_proof_url String?  // The Screenshot
+  total_amount      Decimal
+  created_at        DateTime @default(now())
+}
