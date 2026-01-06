@@ -24,22 +24,31 @@ model Seller {
 }
 
 model Product {
-  id          String   @id @default(uuid())
-  seller_id   String
-  seller      Seller   @relation(fields: [seller_id], references: [id])
-  title       String
-  base_price  Decimal
-  is_active   Boolean  @default(true)
-  variants    Variant[]
-  link_refs   LinkRef[]
+  id            String    @id @default(uuid())
+  seller_id     String
+  seller        Seller    @relation(fields: [seller_id], references: [id])
+  title         String
+  base_price    Decimal
+  image_url     String?   // URL to uploaded product image
+  is_active     Boolean   @default(true)
+  isPriceLocked Boolean   @default(false)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @default(now()) @updatedAt
+  variants      Variant[]
+  link_refs     LinkRef[]
+
+  @@index([seller_id])
 }
 
 model Variant {
   id          String   @id @default(uuid())
   product_id  String
   product     Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
-  name        String   // e.g. "Size M"
+  color       String   // Required: e.g. "Blue", "Red"
+  size        String   // Required: e.g. "S", "M", "L"
+  name        String?  // Optional display helper: "Blue - M"
   stock       Int      @default(0)
+  image_url   String?  // Variant-specific image URL
   orders      Order[]
 }
 
@@ -85,4 +94,17 @@ model Order {
   payment_proof_url String?  // The Screenshot
   total_amount      Decimal
   created_at        DateTime @default(now())
+  order_items       OrderItem[]
 }
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  order_id    String
+  order       Order    @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  product_id  String
+  variant_id  String?
+  quantity    Int      @default(1)
+  unit_price  Decimal
+  created_at  DateTime @default(now())
+}
+

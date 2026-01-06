@@ -2,6 +2,9 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { PrismaClient } from "@repo/database";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 const app = express();
 // Fallback to hardcoded URL if env fails (Local Docker default)
@@ -16,6 +19,25 @@ const prisma = new PrismaClient({
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads')); // Serve uploaded files
+
+// Configure Multer Storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, "../uploads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Unique filename: timestamp-original.ext
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
 
 const PORT = process.env.PORT || 3001;
 
@@ -129,6 +151,7 @@ app.get("/products/:sellerId", async (req, res) => {
     const { sellerId } = req.params;
     const products = await prisma.product.findMany({
       where: { seller_id: sellerId },
+      include: { variants: true, link_refs: true }
     });
     return res.json(products);
   } catch (error) {
@@ -137,30 +160,61 @@ app.get("/products/:sellerId", async (req, res) => {
   }
 });
 
-import multer from "multer";
-import path from "path";
-import fs from "fs";
-
-// Configure Multer Storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, "../uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+// POST /upload - Image upload endpoint
+app.post("/upload", upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
     }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Unique filename: timestamp-original.ext
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    
+    // Return relative path (frontend will prepend API_URL)
+    return res.json({ url: `/uploads/${req.file.filename}` });
+  } catch (error) {
+    console.error("Upload Error:", error);
+    return res.status(500).json({ error: "Upload failed" });
   }
 });
 
-const upload = multer({ storage: storage });
+// POST /products
+app.post("/products", async (req, res) => {
+  try {
+    const { sellerId, title, price, basePrice, variants, imageUrl } = req.body;
+    console.log("Creating Product Body:", JSON.stringify(req.body, null, 2));
+    const productPrice = price || basePrice;
 
-// Serve Uploads Static Folder
-app.use('/uploads', express.static(path.join(__dirname, "../uploads")));
+    if (!sellerId || !title || !productPrice) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Create product with variants
+    const product = await prisma.product.create({
+      data: {
+        seller_id: sellerId,
+        title,
+        base_price: parseFloat(productPrice),
+        image_url: imageUrl || null, // Save product image URL
+        variants: variants && variants.length > 0 ? {
+          create: variants.map((v: { color: string; size: string; stock: number; imageUrl?: string }) => ({
+            color: v.color,
+            size: v.size,
+            image_url: v.imageUrl || null,
+            name: `${v.color} - ${v.size}`, // Auto-generate display name
+            stock: parseInt(v.stock.toString(), 10)
+          }))
+        } : undefined
+      },
+      include: {
+        variants: true
+      }
+    });
+
+    console.log(`✅ Product created: ${product.title} with ${product.variants.length} variants`);
+    return res.json(product);
+  } catch (error) {
+    console.error("Create Product Error:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 // POST /orders
 app.post("/orders", upload.single('paymentProof'), async (req, res) => {
@@ -186,6 +240,21 @@ app.post("/orders", upload.single('paymentProof'), async (req, res) => {
     const totalAmount = linkRef.is_price_locked && linkRef.locked_price
         ? linkRef.locked_price
         : linkRef.product.base_price;
+
+    // 2.5. THE BOUNCER: Check Variant Stock (BEFORE creating order)
+    if (variantId) {
+      const variant = await prisma.variant.findUnique({
+        where: { id: variantId }
+      });
+
+      if (!variant) {
+        return res.status(400).json({ error: "Invalid variant selected" });
+      }
+
+      if (variant.stock < 1) {
+        return res.status(400).json({ error: "Sorry, this item is sold out!" });
+      }
+    }
 
     // 3. Find or Create Shadow Customer
     let customer = await prisma.shadowCustomer.findFirst({
@@ -215,7 +284,9 @@ app.post("/orders", upload.single('paymentProof'), async (req, res) => {
     }
 
     // 4. Handle File URL
-    let paymentProofUrl = null;
+    // 4. Handle File URL
+    let paymentProofUrl = req.body.paymentProof || null; // Support URL from body
+    
     if (req.file) {
       // Construct full URL using request host (dynamic for LAN/Localhost)
       const protocol = req.protocol;
@@ -223,17 +294,27 @@ app.post("/orders", upload.single('paymentProof'), async (req, res) => {
       paymentProofUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
     }
 
-    // 5. Create Order
+    // 5. Create Order (THE FIX: Save variant_id)
     const order = await prisma.order.create({
         data: {
             seller_id: linkRef.seller_id,
             customer_id: customer.id,
             link_ref_id: linkRef.id,
+            variant_id: variantId || null, // ✅ NOW SAVING VARIANT ID
             total_amount: totalAmount,
             status: "pending_verification",
             payment_proof_url: paymentProofUrl
         }
     });
+
+    // 6. THE DEDUCTION: Decrement Stock (AFTER successful order)
+    if (variantId) {
+      await prisma.variant.update({
+        where: { id: variantId },
+        data: { stock: { decrement: 1 } }
+      });
+      console.log(`   📦 Stock decremented for variant ${variantId}`);
+    }
 
     console.log("💰 New Order Received: #", order.human_id);
     if (paymentProofUrl) console.log("   📎 Proof:", paymentProofUrl);
@@ -246,6 +327,120 @@ app.post("/orders", upload.single('paymentProof'), async (req, res) => {
         error: "Internal Server Error", 
         details: error instanceof Error ? error.message : String(error) 
     });
+  }
+});
+
+
+// POST /orders/manual - Point of Sale (Manual Order Creation)
+app.post("/orders/manual", async (req, res) => {
+  try {
+    const { sellerId, customerName, customerPhone, items, isPaid } = req.body;
+
+    // Validation
+    if (!sellerId || !customerName || !customerPhone || !items || items.length === 0) {
+      return res.status(400).json({ error: "Missing required fields (sellerId, customerName, customerPhone, items)" });
+    }
+
+    // Use Prisma transaction for atomic operations
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Find or Create Customer
+      let customer = await tx.shadowCustomer.findFirst({
+        where: { seller_id: sellerId, phone: customerPhone }
+      });
+
+      if (!customer) {
+        customer = await tx.shadowCustomer.create({
+          data: {
+            seller_id: sellerId,
+            phone: customerPhone,
+            full_name: customerName,
+            address: "Manual Order"
+          }
+        });
+      } else {
+        customer = await tx.shadowCustomer.update({
+          where: { id: customer.id },
+          data: { full_name: customerName }
+        });
+      }
+
+      // 2. Validate stock and calculate total
+      let totalAmount = 0;
+      const validatedItems = [];
+
+      for (const item of items) {
+        const variant = await tx.variant.findUnique({
+          where: { id: item.variantId },
+          include: { product: true }
+        });
+
+        if (!variant) {
+          throw new Error(`Variant ${item.variantId} not found`);
+        }
+
+        if (variant.stock < item.quantity) {
+          throw new Error(`Insufficient stock for ${variant.product.title} (${variant.name}). Available: ${variant.stock}, Requested: ${item.quantity}`);
+        }
+
+        totalAmount += item.quantity * parseFloat(item.unitPrice);
+        validatedItems.push({ variant, quantity: item.quantity, unitPrice: item.unitPrice });
+      }
+
+      // 3. Create the Order
+      const order = await tx.order.create({
+        data: {
+          seller_id: sellerId,
+          customer_id: customer.id,
+          total_amount: totalAmount,
+          status: isPaid ? "confirmed" : "pending_verification",
+          // No link_ref for manual orders
+        }
+      });
+
+      // 4. Create OrderItems and decrement stock
+      for (const item of validatedItems) {
+        await tx.orderItem.create({
+          data: {
+            order_id: order.id,
+            product_id: item.variant.product_id,
+            variant_id: item.variant.id,
+            quantity: item.quantity,
+            unit_price: parseFloat(item.unitPrice)
+          }
+        });
+
+        await tx.variant.update({
+          where: { id: item.variant.id },
+          data: { stock: { decrement: item.quantity } }
+        });
+
+        console.log(`   📦 Stock decremented: ${item.variant.product.title} (${item.variant.name}) by ${item.quantity}`);
+      }
+
+      console.log(`💰 Manual Order Created: #${order.human_id} | Items: ${items.length} | Total: ${totalAmount}`);
+
+      return order;
+    });
+
+    // Fetch the complete order with relations
+    const fullOrder = await prisma.order.findUnique({
+      where: { id: result.id },
+      include: {
+        customer: true,
+        order_items: true
+      }
+    });
+
+    return res.json(fullOrder);
+
+  } catch (error) {
+    console.error("Manual Order Error:", error);
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    // Check if it's a stock/validation error
+    if (message.includes("Insufficient stock") || message.includes("not found")) {
+      return res.status(400).json({ error: message });
+    }
+    return res.status(500).json({ error: message });
   }
 });
 
@@ -331,6 +526,61 @@ app.post("/products", async (req, res) => {
     console.error("Create Product Error:", error);
     return res.status(500).json({ error: "Internal Server Error" });
   }
+});
+
+// PUT /products/:id
+app.put("/products/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, price, image_url, variants } = req.body;
+
+    if (!title || !price) {
+        return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const product = await prisma.product.update({
+      where: { id },
+      data: {
+        title,
+        base_price: parseFloat(price),
+        image_url: image_url !== undefined ? image_url : undefined
+      }
+    });
+
+    // Update Variants if provided
+    if (variants && Array.isArray(variants)) {
+        await Promise.all(variants.map((v: any) => 
+            prisma.variant.update({
+                where: { id: v.id },
+                data: {
+                    color: v.color,
+                    size: v.size,
+                    stock: parseInt(v.stock?.toString() || "0")
+                }
+            })
+        ));
+    }
+
+    return res.json(product);
+  } catch (error) {
+    console.error("Update Product Error:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST /upload
+app.post("/upload", upload.single("file"), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+        // Return accessible URL
+        const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+        return res.json({ url: fileUrl });
+    } catch (error) {
+        console.error("Upload Error:", error);
+        return res.status(500).json({ error: "Upload Failed" });
+    }
 });
 
 // DELETE /products/:id

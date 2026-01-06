@@ -29,8 +29,15 @@ async function getLinkDetails(refTag: string) {
 }
 
 // Next.js 15+ / 16: params is a Promise
-export default async function PayPage({ params }: { params: Promise<{ refTag: string }> }) {
+export default async function PayPage({ 
+  params,
+  searchParams 
+}: { 
+  params: Promise<{ refTag: string }>,
+  searchParams: Promise<{ color?: string, size?: string }>
+}) {
   const { refTag } = await params;
+  const search = await searchParams;
   const data = await getLinkDetails(refTag);
 
   if (!data) {
@@ -68,6 +75,8 @@ export default async function PayPage({ params }: { params: Promise<{ refTag: st
             refTag={refTag} 
             sellerName={seller.businessName} 
             variants={product.variants || []}
+            initialColor={search.color}
+            initialSize={search.size}
         />
 
         <p style={styles.footer}>
