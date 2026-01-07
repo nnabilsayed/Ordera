@@ -7,8 +7,9 @@ import { Product, Order } from '../types';
 interface DashboardProps {
     products: Product[];
     orders: Order[];
-    onSwitchTab: (tab: 'orders' | 'products') => void;
+    onSwitchTab: (tab: 'orders' | 'products', filter?: string) => void;
 }
+
 
 export const Dashboard = ({ products, orders, onSwitchTab }: DashboardProps) => {
     const [timeRange, setTimeRange] = useState<'1D' | '7D' | '30D' | 'All'>('7D');
@@ -71,7 +72,7 @@ export const Dashboard = ({ products, orders, onSwitchTab }: DashboardProps) => 
                 {/* Pending Orders (OPERATIONS - Real Time) */}
                 <TouchableOpacity 
                     style={[styles.card, styles.pendingCard, { flex: 1 }]}
-                    onPress={() => onSwitchTab('orders')}
+                    onPress={() => onSwitchTab('orders', 'Pending')}
                 >
                     <Text style={styles.cardLabel}>Pending Orders</Text>
                     <Text style={[styles.cardValue, { color: '#B45309' }]}>{operations.pendingCount}</Text>

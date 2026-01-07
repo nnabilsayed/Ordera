@@ -19,7 +19,7 @@ export interface Order {
     phone: string;
     address: string;
   };
-  link_ref: {
+  link_ref?: {
     ref_tag: string;
     product: { title: string };
   };

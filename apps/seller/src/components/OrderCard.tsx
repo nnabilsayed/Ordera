@@ -37,9 +37,16 @@ export const OrderCard = ({ item, onUpdateStatus, onViewReceipt, onPress }: Orde
       
       {/* Top Row: ID & Status */}
       <View style={styles.row}>
-          <Text style={styles.orderId}>Order #{item.human_id}</Text>
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+            <Text style={styles.orderId}>Order #{item.human_id}</Text>
+            {!item.link_ref && (
+                <View style={{backgroundColor: '#F3F4F6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: '#E5E7EB'}}>
+                    <Text style={{fontSize: 10, color: '#4B5563', fontWeight: '700'}}>MANUAL</Text>
+                </View>
+            )}
+          </View>
           <View style={[styles.badge, { backgroundColor: actionState.bg }]}>
-              <Text style={[styles.badgeText, { color: actionState.color }]}>{actionState.label}</Text>
+              <Text style={[styles.badgeText, { color: actionState.color }]}>{actionState.statusLabel}</Text>
           </View>
       </View>
 

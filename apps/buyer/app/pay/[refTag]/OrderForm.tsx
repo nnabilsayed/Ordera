@@ -3,6 +3,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { API_URL } from '../../config';
 
 const styles = {
   // ... existing styles ...
@@ -386,7 +387,7 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
       if (file) {
         const formData = new FormData();
         formData.append('file', file);
-        const uploadRes = await fetch('http://127.0.0.1:3001/upload', {
+        const uploadRes = await fetch(`${API_URL}/upload`, {
              method: 'POST',
              body: formData
         });
@@ -395,7 +396,7 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
       }
 
       // 2. Submit Order
-      const res = await fetch('http://127.0.0.1:3001/orders', {
+      const res = await fetch(`${API_URL}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

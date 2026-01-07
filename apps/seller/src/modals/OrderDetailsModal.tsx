@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Linking, Share, Alert } from 'react-native';
 import { Order, Product } from '../types';
-import { THEME, getAccessibleUrl } from '../utils';
+import { THEME, getAccessibleUrl, openWhatsApp } from '../utils';
 import { getActionState } from '../utils/statusLogic';
 import { ReceiptModal } from './ReceiptModal';
 
@@ -59,7 +59,7 @@ export const OrderDetailsModal = ({ visible, order, products, onClose, onUpdateS
             `${itemsList}\n` +
             `────────────\n` +
             `💰 Total: ${Number(order.total_amount).toFixed(2)} EGP\n` +
-            `📋 Status: ${getActionState(order.status).label}\n\n` +
+            `📋 Status: ${getActionState(order.status).statusLabel}\n\n` +
             `Thank you for your order! 🙏`;
 
         // Try WhatsApp first if phone exists
@@ -106,13 +106,13 @@ export const OrderDetailsModal = ({ visible, order, products, onClose, onUpdateS
                         <Text style={styles.headerTitle}>Order #{order.human_id}</Text>
                         <View style={{flexDirection: 'row', marginTop: 4}}>
                             <View style={[styles.badge, { backgroundColor: getActionState(order.status).bg }]}>
-                                <Text style={[styles.badgeText, { color: getActionState(order.status).color }]}>{getActionState(order.status).label}</Text>
+                                <Text style={[styles.badgeText, { color: getActionState(order.status).color }]}>{getActionState(order.status).statusLabel}</Text>
                             </View>
                         </View>
                     </View>
                     <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
                         <TouchableOpacity onPress={handleShareReceipt} style={styles.shareBtn}>
-                            <Text style={styles.shareBtnText}>📤 Share</Text>
+                            <Text style={styles.shareBtnText}>Copy for IG/TikTok DM</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                             <Text style={styles.closeText}>Close</Text>
@@ -141,9 +141,16 @@ export const OrderDetailsModal = ({ visible, order, products, onClose, onUpdateS
                                     <Text style={styles.rowLabel}>Phone</Text>
                                     <Text style={styles.rowValue}>{order.customer.phone}</Text>
                                 </View>
-                                <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
-                                    <Text style={styles.callBtnText}>📞 Call User</Text>
-                                </TouchableOpacity>
+                                <View style={{flexDirection: 'row', gap: 8}}>
+                                    {(order.status !== 'pending_verification' && order.status !== 'pending' && order.status !== 'rejected') && (
+                                        <TouchableOpacity style={styles.whatsappBtn} onPress={() => openWhatsApp(order.customer.phone, order.human_id.toString(), order.customer.full_name)}>
+                                            <Text style={styles.whatsappBtnText}>WhatsApp</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                    <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
+                                        <Text style={styles.callBtnText}>📞 Call User</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                         </View>
                     </View>
@@ -186,24 +193,24 @@ export const OrderDetailsModal = ({ visible, order, products, onClose, onUpdateS
                             return (
                                 <TouchableOpacity 
                                     style={[styles.actionBtn, { backgroundColor: actionState.action === 'verify' ? '#10B981' : actionState.color }]}
-                                    onPress={() => {
+                                    onPress={async () => {
                                         if (actionState.action === 'verify') {
                                              if (order.payment_proof_url) {
                                                  setReviewReceipt(getAccessibleUrl(order.payment_proof_url));
                                              } else {
-                                                 onUpdateStatus(order.id, 'confirmed');
-                                                 onClose();
+                                                 await onUpdateStatus(order.id, 'confirmed');
+                                                 // Removed onClose() to stay on details screen
                                              }
                                         } else if (actionState.action === 'ship') {
-                                            onUpdateStatus(order.id, 'shipped');
+                                            await onUpdateStatus(order.id, 'shipped');
                                             onClose();
                                         } else if (actionState.action === 'deliver') {
-                                            onUpdateStatus(order.id, 'delivered');
+                                            await onUpdateStatus(order.id, 'delivered');
                                             onClose();
                                         }
                                     }}
                                 >
-                                    <Text style={styles.actionBtnText}>{actionState.label}</Text>
+                                    <Text style={styles.actionBtnText}>{actionState.buttonLabel}</Text>
                                 </TouchableOpacity>
                             );
                         })()}
@@ -222,7 +229,7 @@ export const OrderDetailsModal = ({ visible, order, products, onClose, onUpdateS
                     if (order) {
                         onUpdateStatus(order.id, 'confirmed');
                         setReviewReceipt(null);
-                        onClose(); // Close both Modals
+                        // Removed onClose() to allow user to see WhatsApp button
                     }
                 }}
                 onReject={() => {
@@ -332,6 +339,17 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 12,
     },
+    whatsappBtn: {
+        backgroundColor: '#25D366',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    whatsappBtnText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: 12,
+    },
     itemRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -379,13 +397,13 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     shareBtn: {
-        backgroundColor: '#25D366', // WhatsApp green
+        backgroundColor: '#E5E7EB', // Gray 200
         paddingVertical: 6,
         paddingHorizontal: 12,
         borderRadius: 8,
     },
     shareBtnText: {
-        color: 'white',
+        color: '#374151', // Gray 700
         fontWeight: '600',
         fontSize: 14,
     }

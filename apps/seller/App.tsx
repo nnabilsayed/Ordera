@@ -140,7 +140,13 @@ export default function App() {
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
     try {
         await OrderService.updateOrderStatus(orderId, newStatus);
-        fetchOrders(); // Refresh immediately
+        
+        // Update selectedOrder locally to reflect change immediately in Modal
+        if (selectedOrder && selectedOrder.id === orderId) {
+            setSelectedOrder({ ...selectedOrder, status: newStatus });
+        }
+
+        fetchOrders(); // Refresh list
     } catch (error: any) {
         Alert.alert("Error", error.message);
     }
@@ -187,7 +193,12 @@ export default function App() {
           <Dashboard 
             products={products}
             orders={orders}
-            onSwitchTab={(tab) => setActiveTab(tab)}
+            onSwitchTab={(tab, filter) => {
+              setActiveTab(tab);
+              if (tab === 'orders' && filter) {
+                setActiveOrderFilter(filter);
+              }
+            }}
           />
         )}
 
@@ -235,6 +246,9 @@ export default function App() {
               activeFilter={activeOrderFilter} 
               setActiveFilter={setActiveOrderFilter} 
               filterOptions={['All', 'Pending', 'Paid', 'Shipped', 'Delivered', 'Cancelled']}
+              badgeCounts={{
+                  'Pending': orders.filter(o => o.status === 'pending' || o.status === 'pending_verification').length
+              }}
             />
             <FlatList
               data={filteredOrders}

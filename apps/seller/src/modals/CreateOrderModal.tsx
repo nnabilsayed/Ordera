@@ -13,6 +13,7 @@ interface CartItem {
     variantName: string;
     quantity: number;
     price: number;
+    stock: number;
 }
 
 interface CreateOrderModalProps {
@@ -45,6 +46,11 @@ export const CreateOrderModal = ({ visible, onClose, products, onOrderCreated }:
         const existingIndex = cart.findIndex(item => item.variantId === variant.id);
         
         if (existingIndex >= 0) {
+            // Check stock limit
+            if (cart[existingIndex].quantity >= variant.stock) {
+                Alert.alert("Stock Limit", `Only ${variant.stock} available.`);
+                return;
+            }
             // Increment quantity
             const newCart = [...cart];
             newCart[existingIndex].quantity += 1;
@@ -56,7 +62,8 @@ export const CreateOrderModal = ({ visible, onClose, products, onOrderCreated }:
                 productName: product.title,
                 variantName: `${variant.color} / ${variant.size}`,
                 quantity: 1,
-                price: parseFloat(product.base_price)
+                price: parseFloat(product.base_price),
+                stock: variant.stock
             }]);
         }
     };
@@ -66,6 +73,13 @@ export const CreateOrderModal = ({ visible, onClose, products, onOrderCreated }:
         const newCart = cart.map(item => {
             if (item.variantId === variantId) {
                 const newQty = item.quantity + delta;
+                
+                // Check stock limit for increase
+                if (delta > 0 && newQty > item.stock) {
+                    Alert.alert("Stock Limit", `Only ${item.stock} available.`);
+                    return item;
+                }
+
                 return newQty > 0 ? { ...item, quantity: newQty } : item;
             }
             return item;

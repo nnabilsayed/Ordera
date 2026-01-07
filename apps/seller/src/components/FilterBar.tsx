@@ -8,14 +8,17 @@ interface FilterBarProps {
   activeFilter: string;
   setActiveFilter: (filter: string) => void;
   filterOptions?: string[];
+  badgeCounts?: Record<string, number>;
 }
+
 
 export const FilterBar = ({ 
     searchQuery, 
     setSearchQuery, 
     activeFilter, 
     setActiveFilter, 
-    filterOptions = ['All', 'Active', 'Out of Stock', 'Newest'] 
+    filterOptions = ['All', 'Active', 'Out of Stock', 'Newest'],
+    badgeCounts = {} 
 }: FilterBarProps) => {
   
   return (
@@ -47,6 +50,27 @@ export const FilterBar = ({
                     <Text style={[styles.chipText, isActive && styles.activeChipText]}>
                         {filter}
                     </Text>
+                    {!!badgeCounts[filter] && (
+                        <View style={{
+                            position: 'absolute',
+                            top: -8,
+                            right: -6,
+                            zIndex: 99,
+                            backgroundColor: '#EF4444',
+                            borderRadius: 10,
+                            minWidth: 20,
+                            height: 20,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderWidth: 2,
+                            borderColor: 'white',
+                            elevation: 4,
+                        }}>
+                             <Text style={{color: 'white', fontSize: 10, fontWeight: '800', paddingHorizontal: 4}}>
+                                {badgeCounts[filter]}
+                             </Text>
+                        </View>
+                    )}
                 </TouchableOpacity>
             );
         })}
@@ -57,10 +81,11 @@ export const FilterBar = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 12,
+    paddingVertical: 16,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: THEME.border,
+    overflow: 'visible',
   },
   input: {
     backgroundColor: '#F3F4F6',
@@ -74,7 +99,9 @@ const styles = StyleSheet.create({
   },
   chipContainer: {
     paddingHorizontal: 16,
+    paddingVertical: 10,
     gap: 8,
+    overflow: 'visible',
   },
   chip: {
     paddingHorizontal: 16,
@@ -83,6 +110,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    overflow: 'visible',
   },
   activeChip: {
     backgroundColor: THEME.text, // Black/Dark

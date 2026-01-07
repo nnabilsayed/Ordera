@@ -1,12 +1,13 @@
 import React from 'react';
 import OrderForm from './OrderForm';
+import { API_URL } from '../../config';
 
 // Force dynamic rendering since we are fetching based on params
 export const dynamic = 'force-dynamic';
 
 async function getLinkDetails(refTag: string) {
   // Try 127.0.0.1 to avoid Windows localhost resolution issues
-  const apiUrl = `http://127.0.0.1:3001/links/${refTag}`;
+  const apiUrl = `${API_URL}/links/${refTag}`;
   console.log(`[Buyer App] Fetching: ${apiUrl}`);
   
   try {

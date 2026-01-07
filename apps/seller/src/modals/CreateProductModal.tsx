@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, Image, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, Image, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { THEME } from '../utils';
 import { API_URL, SELLER_ID } from '../config';
+
 
 interface CreateProductModalProps {
   visible: boolean;
@@ -21,25 +22,88 @@ export const CreateProductModal = ({ visible, onClose, onProductCreated }: Creat
   const [tempVariantStock, setTempVariantStock] = useState('');
   const [tempVariantImageUrl, setTempVariantImageUrl] = useState('');
 
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [tempEditVariant, setTempEditVariant] = useState<{color: string, size: string, stock: string, imageUrl?: string} | null>(null);
+
   const [creating, setCreating] = useState(false);
 
-  // Add Variant to List
+  // Add Variant (Top Form)
   const handleAddVariant = () => {
     if (!tempVariantColor || !tempVariantSize || !tempVariantStock) {
         Alert.alert("Error", "Enter color, size, and stock for the variant");
         return;
     }
-    setNewVariants([...newVariants, { 
+
+    const variantData = { 
       color: tempVariantColor,
       size: tempVariantSize,
       stock: tempVariantStock,
       imageUrl: tempVariantImageUrl || undefined
-    }]);
+    };
+
+    setNewVariants([...newVariants, variantData]);
+
+    // Reset Form
     setTempVariantColor('');
     setTempVariantSize('');
     setTempVariantStock('');
-    setTempVariantImageUrl(''); // Clear temp image
+    setTempVariantImageUrl(''); 
   };
+
+  // Row Editing Logic
+  const startEditingRow = (index: number) => {
+      setEditingIndex(index);
+      setTempEditVariant({ ...newVariants[index] });
+  };
+
+  const saveEditingRow = () => {
+      if (editingIndex !== null && tempEditVariant) {
+          const updated = [...newVariants];
+          updated[editingIndex] = tempEditVariant;
+          setNewVariants(updated);
+          setEditingIndex(null);
+          setTempEditVariant(null);
+      }
+  };
+
+  const cancelEditingRow = () => {
+      setEditingIndex(null);
+      setTempEditVariant(null);
+  };
+
+  // Pick Image for EDITING ROW
+  const handleEditRowImage = async () => {
+    if (!tempEditVariant) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0].uri) {
+      try {
+        const formData = new FormData();
+        formData.append('file', {
+          uri: result.assets[0].uri,
+          name: 'variant_edit.jpg',
+          type: 'image/jpeg'
+        } as any);
+
+        const response = await fetch(`${API_URL}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+        setTempEditVariant({ ...tempEditVariant, imageUrl: `${API_URL}${data.url}` });
+        
+      } catch (error) {
+        Alert.alert("Error", "Failed to upload image");
+      }
+    }
+  };
+
+
 
   // Pick Variant Image for NEW product creation
   const handlePickVariantImage = async () => {
@@ -71,6 +135,28 @@ export const CreateProductModal = ({ visible, onClose, onProductCreated }: Creat
       }
     }
   };
+
+
+  const handleDeleteVariant = (index: number) => {
+    Alert.alert(
+        "Delete Variant",
+        "Are you sure you want to remove this variant?",
+        [
+            { text: "Cancel", style: "cancel" },
+            { 
+                text: "Delete", 
+                style: "destructive",
+                onPress: () => {
+                    const updated = [...newVariants];
+                    updated.splice(index, 1);
+                    setNewVariants(updated);
+                }
+            }
+        ]
+    );
+  };
+
+
 
   // Create Product Logic
   const handleCreateProduct = async () => {
@@ -115,6 +201,8 @@ export const CreateProductModal = ({ visible, onClose, onProductCreated }: Creat
   };
 
   return (
+
+    <>
       <Modal
         animationType="fade"
         transparent={true}
@@ -124,8 +212,15 @@ export const CreateProductModal = ({ visible, onClose, onProductCreated }: Creat
         <KeyboardAvoidingView 
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalOverlay}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
         >
           <View style={styles.modalContent}>
+          <ScrollView
+            style={{ backgroundColor: 'white' }} 
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: 100, padding: 24 }}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
             <Text style={styles.modalTitle}>New Product</Text>
             
             <View style={styles.inputGroup}>
@@ -186,34 +281,126 @@ export const CreateProductModal = ({ visible, onClose, onProductCreated }: Creat
                     {tempVariantImageUrl ? <Image source={{ uri: tempVariantImageUrl }} style={{ width: 40, height: 40, marginLeft: 10, borderRadius: 4 }} /> : null}
                 </TouchableOpacity>
 
-                {/* Add Button */}
-                <TouchableOpacity 
-                    style={{
-                        backgroundColor: '#EEF2FF', 
-                        padding: 12, 
-                        borderRadius: 12, 
-                        alignItems: 'center',
-                        marginBottom: 12,
-                        borderWidth: 1,
-                        borderColor: THEME.primary
-                    }}
-                    onPress={handleAddVariant}
-                >
-                    <Text style={{color: THEME.primary, fontWeight: '700'}}>+ Add Size to List</Text>
-                </TouchableOpacity>
+        {/* Add Button (Add Only) */}
+        <TouchableOpacity 
+            style={{
+                backgroundColor: '#EEF2FF', 
+                padding: 12, 
+                borderRadius: 12, 
+                alignItems: 'center',
+                marginBottom: 12,
+                borderWidth: 1,
+                borderColor: THEME.primary
+            }}
+            onPress={handleAddVariant}
+        >
+            <Text style={{color: THEME.primary, fontWeight: '700'}}>+ Add Size to List</Text>
+        </TouchableOpacity>
                 
                 {/* Variants List */}
                 {newVariants.length > 0 && (
                     <View style={{backgroundColor: '#F9FAFB', padding: 10, borderRadius: 12}}>
                         <Text style={{fontSize: 12, color: '#6B7280', marginBottom: 6, fontWeight: '600'}}>Added Sizes:</Text>
                         <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
-                            {newVariants.map((v, i) => (
-                                <View key={i} style={{backgroundColor: 'white', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB', flexDirection: 'row', alignItems: 'center'}}>
-                                    {v.imageUrl && <Image source={{ uri: v.imageUrl }} style={{ width: 24, height: 24, marginRight: 8, borderRadius: 4 }} />}
-                                    <Text style={{color: THEME.text, fontWeight: '600', fontSize: 13}}>🔵 {v.color} / 📏 {v.size}</Text>
-                                    <Text style={{color: '#6B7280', fontSize: 13, marginLeft: 4}}>({v.stock})</Text>
+                            {newVariants.map((v, i) => {
+                                const isEditing = editingIndex === i;
+                                return (
+                                <View key={i} style={{backgroundColor: 'white', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: isEditing ? THEME.primary : '#E5E7EB', flexDirection: isEditing ? 'column' : 'row', alignItems: isEditing ? 'stretch' : 'center', justifyContent: isEditing ? 'flex-start' : 'space-between', marginBottom: 8, width: '100%'}}>
+                                    
+                                    {isEditing && tempEditVariant ? (
+                                        // EDIT MODE
+                                        <>
+                                        {/* Row 1: Inputs */}
+                                        <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                                            {/* Image Edit Trigger */}
+                                            <TouchableOpacity onPress={handleEditRowImage} style={{borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 4, borderStyle: 'dashed'}}>
+                                                {tempEditVariant.imageUrl ? (
+                                                    <Image source={{ uri: tempEditVariant.imageUrl }} style={{ width: 40, height: 40, borderRadius: 4 }} />
+                                                ) : (
+                                                    <View style={{width: 40, height: 40, backgroundColor: '#F9FAFB', borderRadius: 4, alignItems: 'center', justifyContent: 'center'}}>
+                                                        <Text style={{fontSize: 10}}>📷</Text>
+                                                    </View>
+                                                )}
+                                            </TouchableOpacity>
+
+                                            <View style={{flexDirection: 'row', gap: 8, flex: 1}}>
+                                                <View style={{flex: 2}}>
+                                                    <Text style={{fontSize: 10, color: '#6B7280', marginBottom: 2, fontWeight: '600'}}>Color</Text>
+                                                    <TextInput 
+                                                        value={tempEditVariant.color}
+                                                        onChangeText={(txt) => setTempEditVariant({...tempEditVariant, color: txt})}
+                                                        placeholder="Color"
+                                                        style={[styles.input, {padding: 8, fontSize: 13, height: 36}]}
+                                                    />
+                                                </View>
+                                                <View style={{flex: 2}}>
+                                                    <Text style={{fontSize: 10, color: '#6B7280', marginBottom: 2, fontWeight: '600'}}>Size</Text>
+                                                    <TextInput 
+                                                        value={tempEditVariant.size}
+                                                        onChangeText={(txt) => setTempEditVariant({...tempEditVariant, size: txt})}
+                                                        placeholder="Size"
+                                                        style={[styles.input, {padding: 8, fontSize: 13, height: 36}]}
+                                                    />
+                                                </View>
+                                                <View style={{flex: 1}}>
+                                                    <Text style={{fontSize: 10, color: '#6B7280', marginBottom: 2, fontWeight: '600'}}>Qty</Text>
+                                                    <TextInput 
+                                                        value={tempEditVariant.stock}
+                                                        onChangeText={(txt) => setTempEditVariant({...tempEditVariant, stock: txt})}
+                                                        placeholder="Qty"
+                                                        keyboardType="numeric"
+                                                        style={[styles.input, {padding: 8, fontSize: 13, height: 36}]}
+                                                    />
+                                                </View>
+                                            </View>
+                                        </View>
+
+                                        {/* Row 2: Actions */}
+                                        <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 8}}>
+                                            <TouchableOpacity 
+                                                onPress={saveEditingRow}
+                                                style={{padding: 8, backgroundColor: '#ECFDF5', borderRadius: 6, borderWidth: 1, borderColor: '#D1FAE5'}}
+                                            >
+                                                <Text style={{fontSize: 14, fontWeight: '700', color: '#059669'}}>Save Changes</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity 
+                                                onPress={cancelEditingRow}
+                                                style={{padding: 8, backgroundColor: '#F3F4F6', borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB'}}
+                                            >
+                                                <Text style={{fontSize: 14, fontWeight: '600', color: '#4B5563'}}>Cancel</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        </>
+                                    ) : (
+                                        // VIEW MODE (Unchanged)
+                                        <>
+                                        <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                                            {v.imageUrl && <Image source={{ uri: v.imageUrl }} style={{ width: 32, height: 32, marginRight: 8, borderRadius: 4 }} />}
+                                            <View>
+                                                <Text style={{color: THEME.text, fontWeight: '600', fontSize: 13}}>🔵 {v.color} / 📏 {v.size}</Text>
+                                                <Text style={{color: '#6B7280', fontSize: 13}}>Qty: {v.stock}</Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={{flexDirection: 'row', gap: 8}}>
+                                            <TouchableOpacity 
+                                                onPress={() => startEditingRow(i)}
+                                                style={{padding: 10, backgroundColor: '#EFF6FF', borderRadius: 6}}
+                                            >
+                                                <Text style={{fontSize: 16}}>✏️</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity 
+                                                onPress={() => handleDeleteVariant(i)} 
+                                                style={{padding: 10, backgroundColor: '#FEF2F2', borderRadius: 6}}
+                                            >
+                                                <Text style={{fontSize: 16}}>🗑️</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        </>
+                                    )}
                                 </View>
-                            ))}
+                                );
+                            })}
                         </View>
                     </View>
                 )}
@@ -239,9 +426,13 @@ export const CreateProductModal = ({ visible, onClose, onProductCreated }: Creat
                 </Text>
               </TouchableOpacity>
             </View>
+          </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+
+      </>
   );
 };
 
@@ -253,14 +444,16 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalContent: {
+    maxHeight: '90%',
     backgroundColor: 'white',
     borderRadius: 24,
-    padding: 24,
+    // padding handled by ScrollView
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,
     shadowRadius: 20,
     elevation: 10,
+    overflow: 'hidden',
   },
   modalTitle: {
     fontSize: 24,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, Image, FlatList, KeyboardAvoidingView, Platform, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, Image, FlatList, KeyboardAvoidingView, Platform, Pressable, Alert, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Product } from '../types';
 import { THEME, getAccessibleUrl } from '../utils';
@@ -70,53 +70,58 @@ export const EditProductModal = ({ visible, product, onClose, onSave }: EditProd
 
     return (
       <Modal visible={visible} transparent={true} animationType="slide">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex:1}}>
-            <Pressable 
-                style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
-                onPress={onClose}
+        <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+            style={{flex:1}}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
+        >
+            <ScrollView 
+                contentContainerStyle={{flexGrow: 1}}
+                keyboardShouldPersistTaps="handled"
             >
                 <Pressable 
-                    style={{ width: '85%', backgroundColor: 'white', borderRadius: 12, padding: 20 }}
-                    onPress={(e) => e.stopPropagation()}
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingVertical: 40 }}
+                    onPress={onClose}
                 >
-                    <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 16 }}>Edit Product</Text>
-                    
-                    <Text style={styles.label}>Product Name</Text>
-                    <TextInput 
-                        style={styles.input} 
-                        value={title} 
-                        onChangeText={setTitle} 
-                        placeholder="e.g. Blue Hoodie"
-                    />
+                    <Pressable 
+                        style={{ width: '85%', backgroundColor: 'white', borderRadius: 12, padding: 20 }}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 16 }}>Edit Product</Text>
+                        
+                        <Text style={styles.label}>Product Name</Text>
+                        <TextInput 
+                            style={styles.input} 
+                            value={title} 
+                            onChangeText={setTitle} 
+                            placeholder="e.g. Blue Hoodie"
+                        />
 
-                    <Text style={[styles.label, {marginTop: 12}]}>Price (EGP)</Text>
-                    <TextInput 
-                        style={styles.input} 
-                        value={price} 
-                        onChangeText={setPrice} 
-                        keyboardType="numeric"
-                        placeholder="e.g. 250"
-                    />
+                        <Text style={[styles.label, {marginTop: 12}]}>Price (EGP)</Text>
+                        <TextInput 
+                            style={styles.input} 
+                            value={price} 
+                            onChangeText={setPrice} 
+                            keyboardType="numeric"
+                            placeholder="e.g. 250"
+                        />
 
-                    <Text style={[styles.label, {marginTop: 12}]}>Product Image</Text>
-                    <TouchableOpacity onPress={() => pickImage(-1)} style={{ alignItems: 'center', marginVertical: 10, borderWidth: 1, borderColor: '#ddd', borderStyle: 'dashed', borderRadius: 8, padding: 10 }}>
-                        {image ? (
-                            <Image source={{ uri: getAccessibleUrl(image) || undefined }} style={{ width: 100, height: 100, borderRadius: 8 }} />
-                        ) : (
-                            <View style={{ width: 100, height: 100, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9f9f9' }}>
-                                <Text>Select Image</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
+                        <Text style={[styles.label, {marginTop: 12}]}>Product Image</Text>
+                        <TouchableOpacity onPress={() => pickImage(-1)} style={{ alignItems: 'center', marginVertical: 10, borderWidth: 1, borderColor: '#ddd', borderStyle: 'dashed', borderRadius: 8, padding: 10 }}>
+                            {image ? (
+                                <Image source={{ uri: getAccessibleUrl(image) || undefined }} style={{ width: 100, height: 100, borderRadius: 8 }} />
+                            ) : (
+                                <View style={{ width: 100, height: 100, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9f9f9' }}>
+                                    <Text>Select Image</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
 
-                    {/* Inventory Breakdown in Edit Mode */}
-                    <Text style={[styles.label, {marginTop: 16, marginBottom: 8}]}>Inventory Breakdown (Editable)</Text>
-                    <View style={{ maxHeight: 300 }}>
-                        <FlatList
-                            data={variants}
-                            keyExtractor={item => item.id}
-                            renderItem={({ item, index }) => (
-                                <View style={{ marginBottom: 20, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 10 }}>
+                        {/* Inventory Breakdown in Edit Mode */}
+                        <Text style={[styles.label, {marginTop: 16, marginBottom: 8}]}>Inventory Breakdown (Editable)</Text>
+                        <View>
+                            {variants.map((item, index) => (
+                                <View key={item.id || index} style={{ marginBottom: 20, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 10 }}>
                                     {/* Top Row: Details */}
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
                                         {/* Color */}
@@ -175,20 +180,20 @@ export const EditProductModal = ({ visible, product, onClose, onSave }: EditProd
                                         </Text>
                                     </TouchableOpacity>
                                 </View>
-                            )}
-                        />
-                    </View>
+                            ))}
+                        </View>
 
-                    <View style={styles.modalButtons}>
-                        <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={onClose}>
-                            <Text style={styles.cancelButtonText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={handleSave}>
-                            <Text style={styles.saveButtonText}>Save Changes</Text>
-                        </TouchableOpacity>
-                    </View>
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={onClose}>
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={handleSave}>
+                                <Text style={styles.saveButtonText}>Save Changes</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
                 </Pressable>
-            </Pressable>
+            </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     );
