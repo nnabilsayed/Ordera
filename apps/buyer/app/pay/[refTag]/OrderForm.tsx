@@ -5,6 +5,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../../config';
 
+const GOVERNORATES = [
+  "القاهرة", "الجيزة", "الإسكندرية", "الدقهلية", "البحر الأحمر", 
+  "البحيرة", "الفيوم", "الغربية", "الإسماعيلية", "المنوفية", 
+  "المنيا", "القليوبية", "الوادي الجديد", "السويس", "أسوان", 
+  "أسيوط", "بني سويف", "بورسعيد", "دمياط", "الشرقية", 
+  "جنوب سيناء", "كفر الشيخ", "مطروح", "الأقصر", "قنا", 
+  "شمال سيناء", "سوهاج"
+];
+
 const styles = {
   // ... existing styles ...
   form: {
@@ -217,7 +226,8 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    address: ''
+    address: '',
+    governorate: 'القاهرة'
   });
   const [file, setFile] = useState<File | null>(null);
 
@@ -281,6 +291,12 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
     return variant ? variant.stock > 0 : false;
   };
 
+  // Helper: Get stock for a specific combination
+  const getStockForVariant = (color: string, size: string): number => {
+      const variant = variants.find(v => v.color === color && v.size === size);
+      return variant ? variant.stock : 0;
+  };
+
   // Helper: Check if color has ANY available sizes
   const colorHasStock = (color: string): boolean => {
     return variants.some(v => v.color === color && v.stock > 0);
@@ -295,6 +311,9 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
   const matchedVariant = variants.find(
     v => v.color === selectedColor && v.size === selectedSize
   );
+
+  const isOutOfStock = matchedVariant ? matchedVariant.stock === 0 : false;
+  const isLowStock = matchedVariant ? (matchedVariant.stock > 0 && matchedVariant.stock <= 5) : false;
 
   // Auto-reset size if color changes and combination is invalid
   const handleColorSelect = (color: string) => {
@@ -320,7 +339,7 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
         return v && v.stock > 0;
     });
 
-    if (availableSizes.length === 1) {
+    if (availableSizes.length === 1 && availableSizes[0]) {
         setSelectedSize(availableSizes[0]);
     }
   };
@@ -349,7 +368,7 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
         return v && v.stock > 0;
     });
 
-    if (availableColors.length === 1) {
+    if (availableColors.length === 1 && availableColors[0]) {
         setSelectedColor(availableColors[0]);
     }
   };
@@ -403,7 +422,7 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
           refTag,
           customerName: formData.name,
           customerPhone: formData.phone,
-          customerAddress: formData.address,
+          customerAddress: `${formData.governorate} - ${formData.address}`,
           variantId: matchedVariant.id, // Pass the variant ID!
           paymentProof: paymentProofUrl
         })
@@ -484,6 +503,16 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
                   ? isAvailable(color, selectedSize)
                   : colorHasStock(color);
                 
+                // Correct Stock Look-Ahead for Colors
+                let stockForBadge: number | null = null;
+                if (selectedSize) {
+                    stockForBadge = getStockForVariant(color, selectedSize);
+                } else {
+                     // Aggregate stock for this color across all sizes
+                     const relevantVariants = variants.filter(v => v.color === color);
+                     stockForBadge = relevantVariants.reduce((acc, v) => acc + v.stock, 0);
+                }
+
                 return (
                   <button
                     key={color}
@@ -493,16 +522,30 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
                       ...styles.variantPill,
                       ...(selectedColor === color ? styles.variantPillActive : {}),
                       ...(!isVariantAvailable ? {
-                        opacity: 0.5,
-                        backgroundColor: '#F3F4F6',
-                        borderColor: '#E5E7EB',
+                        opacity: 0.6,
+                        backgroundColor: '#F9FAFB',
+                        borderColor: '#D1D5DB',
+                        borderStyle: 'dashed',
                         color: '#9CA3AF',
-                        cursor: 'not-allowed'
-                      } : {})
+                      } : {}),
+                      display: 'flex',
+                      flexDirection: 'row',
+                      alignItems: 'center', // Align Vertically
+                      gap: '6px', // Gap between name and badge
+                      lineHeight: '1.2'
                     }}
-                    disabled={!isVariantAvailable}
                   >
-                    {color}
+                    <span>{color}</span>
+                    {/* Inline Stock Badge */}
+                    {stockForBadge !== null && (
+                        <span style={{ fontSize: '11px', fontWeight: 'bold' }}>
+                            {stockForBadge === 0 ? (
+                                <span style={{ color: '#EF4444' }}>نفذت</span>
+                            ) : stockForBadge <= 5 ? (
+                                <span style={{ color: '#DC2626' }}>({stockForBadge})</span>
+                            ) : null}
+                        </span>
+                    )}
                   </button>
                 );
               })}
@@ -519,6 +562,16 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
                   ? isAvailable(selectedColor, size)
                   : sizeHasStock(size);
                 
+                // Correct Stock Look-Ahead for Sizes
+                let stockForBadge: number | null = null;
+                if (selectedColor) {
+                    stockForBadge = getStockForVariant(selectedColor, size);
+                } else {
+                    // Aggregate stock for this size across all colors
+                    const relevantVariants = variants.filter(v => v.size === size);
+                    stockForBadge = relevantVariants.reduce((acc, v) => acc + v.stock, 0);
+                }
+
                 return (
                   <button
                     key={size}
@@ -528,28 +581,37 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
                       ...styles.variantPill,
                       ...(selectedSize === size ? styles.variantPillActive : {}),
                       ...(!isVariantAvailable ? {
-                        opacity: 0.5,
-                        backgroundColor: '#F3F4F6',
-                        borderColor: '#E5E7EB',
+                        opacity: 0.6,
+                        backgroundColor: '#F9FAFB',
+                        borderColor: '#D1D5DB',
+                        borderStyle: 'dashed',
                         color: '#9CA3AF',
-                        cursor: 'not-allowed'
-                      } : {})
+                      } : {}),
+                      display: 'flex',
+                      flexDirection: 'row',
+                      alignItems: 'center', // Align Vertically
+                      gap: '6px', // Gap between name and badge
+                       lineHeight: '1.2'
                     }}
-                    disabled={!isVariantAvailable}
                   >
-                    {size}
+                    <span>{size}</span>
+                     {/* Inline Stock Badge */}
+                     {stockForBadge !== null && (
+                        <span style={{ fontSize: '11px', fontWeight: 'bold' }}>
+                            {stockForBadge === 0 ? (
+                                <span style={{ color: '#EF4444' }}>نفذت</span>
+                            ) : stockForBadge <= 5 ? (
+                                <span style={{ color: '#DC2626' }}>({stockForBadge})</span>
+                            ) : null}
+                        </span>
+                    )}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Stock Warning */}
-          {selectedColor && selectedSize && matchedVariant && matchedVariant.stock < 1 && (
-            <div style={{...styles.error, marginTop: '10px'}}>
-              ⚠️ هذا المنتج غير متوفر / This variant is out of stock!
-            </div>
-          )}
+
         </div>
       )}
 
@@ -579,16 +641,40 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
         />
       </div>
 
-      {/* 4. ADDRESS */}
+      {/* 4. GOVERNORATE & ADDRESS */}
       <div style={styles.field}>
-        <label style={styles.label}>العنوان</label>
+        <label style={styles.label}>المحافظة</label>
+        <select
+          required
+          style={{
+            ...styles.input, 
+            appearance: 'none', 
+            cursor: 'pointer',
+            // Custom Dropdown Arrow (Chevron Down in Gray-500)
+            backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7' /%3e%3c/svg%3e")`,
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'left 12px center',
+            backgroundSize: '20px',
+            paddingLeft: '40px' // Make space for the arrow
+          }}
+          value={formData.governorate}
+          onChange={e => setFormData({ ...formData, governorate: e.target.value })}
+        >
+          {GOVERNORATES.map(gov => (
+            <option key={gov} value={gov}>{gov}</option>
+          ))}
+        </select>
+      </div>
+
+      <div style={styles.field}>
+        <label style={styles.label}>العنوان بالتفصيل</label>
         <input
           type="text"
           required
           style={styles.input}
           value={formData.address}
           onChange={e => setFormData({ ...formData, address: e.target.value })}
-          placeholder="القاهرة، مدينة نصر..."
+          placeholder="اسم الشارع، رقم العمارة، علامة مميزة..."
         />
       </div>
 
@@ -613,12 +699,32 @@ export default function OrderForm({ refTag, sellerName, variants, initialColor, 
         </div>
       )}
 
+      {/* Scarcity Badge */}
+      {isLowStock && matchedVariant && (
+        <div className="bg-red-50 text-red-600 animate-pulse" style={{
+            padding: '10px',
+            borderRadius: '8px',
+            textAlign: 'center',
+            marginBottom: '12px',
+            fontWeight: 'bold',
+            backgroundColor: '#FEF2F2', // Fallback for bg-red-50
+            color: '#DC2626', // Fallback for text-red-600
+        }}>
+           🔥 باقي {matchedVariant.stock} قطع فقط!
+        </div>
+      )}
+
       <button
         type="submit"
-        disabled={status === 'submitting'}
-        style={{...styles.button, opacity: status === 'submitting' ? 0.7 : 1}}
+        disabled={status === 'submitting' || isOutOfStock}
+        style={{
+            ...styles.button, 
+            opacity: status === 'submitting' ? 0.7 : 1,
+            backgroundColor: isOutOfStock ? '#D1D5DB' : '#111827', // Gray-300 if OOS
+            cursor: (status === 'submitting' || isOutOfStock) ? 'not-allowed' : 'pointer'
+        }}
       >
-        {status === 'submitting' ? 'جاري الإرسال...' : 'إتمام الطلب'}
+        {status === 'submitting' ? 'جاري الإرسال...' : (isOutOfStock ? 'نفذت الكمية' : 'إتمام الطلب')}
       </button>
     </form>
   );

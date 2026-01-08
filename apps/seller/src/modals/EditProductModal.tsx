@@ -106,6 +106,7 @@ export const EditProductModal = ({ visible, product, onClose, onSave }: EditProd
                             placeholder="e.g. 250"
                         />
 
+{/* 
                         <Text style={[styles.label, {marginTop: 12}]}>Product Image</Text>
                         <TouchableOpacity onPress={() => pickImage(-1)} style={{ alignItems: 'center', marginVertical: 10, borderWidth: 1, borderColor: '#ddd', borderStyle: 'dashed', borderRadius: 8, padding: 10 }}>
                             {image ? (
@@ -116,6 +117,7 @@ export const EditProductModal = ({ visible, product, onClose, onSave }: EditProd
                                 </View>
                             )}
                         </TouchableOpacity>
+*/}
 
                         {/* Inventory Breakdown in Edit Mode */}
                         <Text style={[styles.label, {marginTop: 16, marginBottom: 8}]}>Inventory Breakdown (Editable)</Text>
